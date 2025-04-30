@@ -1,0 +1,102 @@
+
+
+-- Apartments Table (Master Inventory)
+create table apartments (
+  id uuid primary key default gen_random_uuid(),
+  block text not null,
+  flat_number text not null,
+  floor_number integer,
+  flat_type text,
+  area_sqft numeric,
+  status text default 'Available',
+  created_at timestamp default now(),
+  unique (block, flat_number)
+);
+
+
+-- Residents Table (Updated to reference apartments)
+create table residents (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  email text,
+  apartment_id uuid references apartments(id) on delete set null,
+  status text default 'Active',
+  created_at timestamp default now()
+);
+
+
+
+-- 2. Staff Table
+create table staff (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  role text,
+  shift_time text,
+  status text default 'Active',
+  created_at timestamp default now()
+);
+
+-- 3. Visitors Table
+create table visitors (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  purpose text,
+  visiting_flat text,
+  resident_id uuid references residents(id) on delete set null,
+  entry_time timestamp,
+  exit_time timestamp,
+  created_at timestamp default now()
+);
+
+-- 4. Visitor Logs
+create table visitor_logs (
+  id uuid primary key default gen_random_uuid(),
+  visitor_id uuid references visitors(id) on delete cascade,
+  guard_id uuid references guards(id) on delete set null,
+  remarks text,
+  created_at timestamp default now()
+);
+
+-- 5. Maintenance Bills
+create table maintenance_bills (
+  id uuid primary key default gen_random_uuid(),
+  resident_id uuid references residents(id) on delete cascade,
+  month_year text,
+  amount_due numeric,
+  due_date date,
+  status text default 'Pending',
+  generated_at timestamp default now()
+);
+
+-- 6. Payments
+create table payments (
+  id uuid primary key default gen_random_uuid(),
+  maintenance_bill_id uuid references maintenance_bills(id) on delete cascade,
+  paid_amount numeric,
+  paid_on timestamp,
+  payment_mode text
+);
+
+-- 7. Guards Table
+create table guards (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  shift text,
+  status text default 'Active',
+  created_at timestamp default now()
+);
+
+-- 8. Guard Patrols
+create table guard_patrols (
+  id uuid primary key default gen_random_uuid(),
+  guard_id uuid references guards(id) on delete cascade,
+  patrol_start timestamp,
+  patrol_end timestamp,
+  patrol_notes text,
+  created_at timestamp default now()
+);
+
