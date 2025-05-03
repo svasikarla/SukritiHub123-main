@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from 'react';
-import { Bell, User } from 'lucide-react';
+import { Bell, User, LogOut, Settings, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -11,7 +11,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/use-auth';
+import { Badge } from '@/components/ui/badge';
 
 interface NavbarProps {
   children?: React.ReactNode;
@@ -20,7 +22,9 @@ interface NavbarProps {
 export function Navbar({ children }: NavbarProps) {
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [pageTitle, setPageTitle] = useState('Dashboard');
+  const { user, roles, signOut } = useAuth();
 
   useEffect(() => {
     // Set page title based on current route
@@ -38,6 +42,11 @@ export function Navbar({ children }: NavbarProps) {
       title: "No new notifications",
       description: "You're all caught up!",
     });
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
   };
 
   return (
@@ -71,12 +80,32 @@ export function Navbar({ children }: NavbarProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span>{user?.email}</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {roles.map(role => (
+                      <Badge key={role.id} variant="outline" className="text-xs">
+                        {role.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
+                <UserCircle className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './Navbar';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarFooter, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from "@/components/ui/sidebar";
-import { Home, Users, UserPlus, Shield, DollarSign, Menu, X, FileText, Book, List, Clock } from 'lucide-react';
+import { Home, Users, UserPlus, Shield, DollarSign, Menu, X, FileText, Book, List, Clock, UserCog } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useLocation, Link } from 'react-router-dom';
 
@@ -10,6 +11,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const isMobile = useIsMobile();
   const location = useLocation();
+  const { hasRole } = useAuth();
   
   useEffect(() => {
     if (isMobile) {
@@ -35,8 +37,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { title: "Accounts", icon: FileText, path: "/bookkeeping/accounts" },
         { title: "Bye-Laws", icon: List, path: "/bookkeeping/bye-laws" },
         { title: "GBM Minutes", icon: Clock, path: "/bookkeeping/gbm-minutes" },
+        { title: "Payments", icon: DollarSign, path: "/bookkeeping/payments" },
       ]
     },
+    // Only show User Management for Super Admin
+    ...(hasRole('Super Admin') ? [
+      { title: "User Management", icon: UserCog, path: "/user-management" }
+    ] : []),
   ];
 
   const isActive = (path: string) => {
