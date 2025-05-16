@@ -92,52 +92,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function fetchUserRolesAndPermissions(userId: string) {
     try {
       setLoadingRoles(true);
+      logger.info('Fetching roles and permissions for user:', userId);
       
-      // For now, we'll use mock roles and permissions since the database schema
-      // doesn't include the required tables
-      logger.info('Setting default roles and permissions for user:', userId);
+      // Fetch actual roles from the database instead of using mock data
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select(`
+          role_id,
+          roles:role_id (
+            id,
+            name,
+            description,
+            created_at
+          )
+        `)
+        .eq('user_id', userId);
       
-      // Set default roles for testing
-      const defaultRoles: Role[] = [
-        {
-          id: '1',
-          name: 'user',
-          description: 'Regular user',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: 'Admin',
-          description: 'Administrator with elevated privileges',
-          created_at: new Date().toISOString()
+      if (rolesError) {
+        logger.error('Error fetching user roles:', rolesError);
+        throw rolesError;
+      }
+      
+      // Extract roles from the nested structure
+      const fetchedRoles: Role[] = userRoles.map(ur => ur.roles);
+      logger.info('Fetched roles:', fetchedRoles);
+      setRoles(fetchedRoles);
+      
+      // Fetch permissions for these roles
+      const roleIds = userRoles.map(ur => ur.role_id);
+      const { data: rolePermissions, error: permError } = await supabase
+        .from('role_permissions')
+        .select(`
+          permission_id,
+          permissions:permission_id (
+            id,
+            name,
+            description,
+            created_at
+          )
+        `)
+        .in('role_id', roleIds);
+      
+      if (permError) {
+        logger.error('Error fetching role permissions:', permError);
+        throw permError;
+      }
+      
+      // Extract unique permissions from the nested structure
+      const permissionsMap = new Map();
+      rolePermissions.forEach(rp => {
+        if (rp.permissions) {
+          permissionsMap.set(rp.permissions.id, rp.permissions);
         }
-      ];
+      });
       
-      // Set default permissions for testing
-      const defaultPermissions: Permission[] = [
-        {
-          id: '1',
-          name: 'read:profile',
-          description: 'Can read own profile',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: 'update:profile',
-          description: 'Can update own profile',
-          created_at: new Date().toISOString()
-        }
-      ];
+      const fetchedPermissions: Permission[] = Array.from(permissionsMap.values());
+      logger.info('Fetched permissions:', fetchedPermissions);
+      setPermissions(fetchedPermissions);
       
-      setRoles(defaultRoles);
-      setPermissions(defaultPermissions);
-      
-      logger.info('Default roles and permissions set successfully');
     } catch (error) {
-      logger.error('Unexpected error during role setup:', error);
-      // Reset state on error
-      setRoles([]);
-      setPermissions([]);
+      logger.error('Error during role/permission setup:', error);
+      // Don't reset roles/permissions on error - this could cause logout loops
     } finally {
       setLoadingRoles(false);
     }
@@ -211,7 +226,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * @returns Boolean indicating if user has the permission
    */
   const hasPermission = (permissionName: string) => {
-    return permissions.some(permission => permission.name === permissionName);
+    logger.info(`Checking permission: ${permissionName}`, { 
+      permissionName, 
+      availablePermissions: permissions.map(p => p.name) 
+    });
+    
+    const result = permissions.some(permission => permission.name === permissionName);
+    logger.info(`Permission check result for ${permissionName}: ${result}`);
+    return result;
   };
 
   const value = {
