@@ -48,18 +48,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadingRoles, setLoadingRoles] = useState(false);
 
+  const resetLoadingState = () => {
+    // Force loading state to false after a timeout
+    // This is a safety mechanism in case other loading logic fails
+    setTimeout(() => {
+      if (loading) {
+        console.log('Force resetting loading state after timeout');
+        setLoading(false);
+      }
+    }, 5000); // 5 second timeout
+  };
+
   useEffect(() => {
     // Check active session and set the user
     const fetchUser = async () => {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        setUser(session.user);
-        await fetchUserRolesAndPermissions(session.user.id);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          setUser(session.user);
+          try {
+            await fetchUserRolesAndPermissions(session.user.id);
+          } catch (error) {
+            console.error('Error fetching roles and permissions:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching session:', error);
+      } finally {
+        setLoading(false);
+        resetLoadingState();
       }
-      
-      setLoading(false);
     };
 
     fetchUser();
@@ -67,15 +87,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          setUser(session.user);
-          await fetchUserRolesAndPermissions(session.user.id);
-        } else {
-          setUser(null);
-          setRoles([]);
-          setPermissions([]);
+        try {
+          if (session?.user) {
+            setUser(session.user);
+            try {
+              await fetchUserRolesAndPermissions(session.user.id);
+            } catch (error) {
+              console.error('Error fetching roles and permissions during auth change:', error);
+            }
+          } else {
+            setUser(null);
+            setRoles([]);
+            setPermissions([]);
+          }
+        } catch (error) {
+          console.error('Error during auth state change:', error);
+        } finally {
+          setLoading(false);
+          resetLoadingState();
         }
-        setLoading(false);
       }
     );
 

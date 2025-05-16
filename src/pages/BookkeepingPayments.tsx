@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Upload, FileImage, Check, AlertCircle, RefreshCw, Calendar, User, DollarSign } from 'lucide-react';
+import { Upload, FileImage, Check, AlertCircle, RefreshCw, Calendar, User, DollarSign, Home } from 'lucide-react';
 import Tesseract from 'tesseract.js';
+import { useNavigate } from 'react-router-dom';
 
 // Define interfaces for our data
 type Resident = Tables<'residents'>;
@@ -37,6 +38,9 @@ interface ExtractedData {
 }
 
 const BookkeepingPayments = () => {
+  // Add navigate hook
+  const navigate = useNavigate();
+  
   // State for file upload
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -53,6 +57,10 @@ const BookkeepingPayments = () => {
   const [residents, setResidents] = useState<ResidentWithUnit[]>([]);
   const [selectedResident, setSelectedResident] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
+  
+  // Add this state for payment history
+  const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
   // Toast notifications
   const { toast } = useToast();
@@ -915,6 +923,57 @@ const BookkeepingPayments = () => {
     return months;
   };
 
+  // Add this function to fetch payment history
+  const fetchPaymentHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      
+      // Fetch payments with related maintenance bill and resident information
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          id, 
+          paid_amount, 
+          paid_on, 
+          payment_mode, 
+          transaction_id,
+          payment_screenshot,
+          maintenance_bills:maintenance_bill_id (
+            id,
+            month_year,
+            resident_id,
+            residents:resident_id (
+              id,
+              name,
+              apartments:apartment_id (
+                block,
+                flat_number
+              )
+            )
+          )
+        `)
+        .order('paid_on', { ascending: false });
+      
+      if (error) throw error;
+      
+      setPaymentHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load payment history.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Call this when the component mounts or when the tab changes
+  useEffect(() => {
+    fetchPaymentHistory();
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
@@ -922,6 +981,16 @@ const BookkeepingPayments = () => {
           <h1 className="text-2xl font-medium mb-1">Payment Upload</h1>
           <p className="text-muted-foreground">Upload UPI payment receipts and process them automatically</p>
         </div>
+        
+        {/* Add Back to Dashboard button */}
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2"
+        >
+          <Home size={16} />
+          Back to Dashboard
+        </Button>
       </div>
 
       <Tabs defaultValue="upload" className="space-y-6">
@@ -1174,20 +1243,75 @@ const BookkeepingPayments = () => {
 
         <TabsContent value="history" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Recent Payments</CardTitle>
-              <CardDescription>View recent payment uploads and their status</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Recent Payments</CardTitle>
+                <CardDescription>View recent payment uploads and their status</CardDescription>
+              </div>
+              <Button variant="outline" onClick={fetchPaymentHistory} disabled={loadingHistory}>
+                {loadingHistory ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Refresh
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8">
-                <div className="rounded-full bg-muted p-3 mx-auto mb-4 w-fit">
-                  <DollarSign className="h-6 w-6 text-muted-foreground" />
+              {loadingHistory ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
                 </div>
-                <h3 className="text-lg font-medium mb-2">No Payment History</h3>
-                <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Payment history will be displayed here once payments are processed.
-                </p>
-              </div>
+              ) : paymentHistory.length > 0 ? (
+                <div className="space-y-4">
+                  {paymentHistory.map((payment) => {
+                    const resident = payment.maintenance_bills?.residents;
+                    const apartment = resident?.apartments;
+                    const unitDisplay = apartment ? `${apartment.block}-${apartment.flat_number}` : 'No Unit';
+                    
+                    return (
+                      <Card key={payment.id} className="overflow-hidden hover:shadow-md transition-all duration-300">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h3 className="font-medium">{resident?.name || 'Unknown Resident'}</h3>
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                                <User size={14} />
+                                <span>{unitDisplay}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                <Calendar size={14} />
+                                <span>{new Date(payment.paid_on).toLocaleDateString()}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {payment.transaction_id}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold text-lg">₹{payment.paid_amount.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-sm">
+                                <span>{payment.maintenance_bills?.month_year || 'Unknown Period'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="rounded-full bg-muted p-3 mx-auto mb-4 w-fit">
+                    <DollarSign className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No Payment History</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    Payment history will be displayed here once payments are processed.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
